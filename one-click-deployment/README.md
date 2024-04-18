@@ -23,3 +23,10 @@ All the needed powershell commands are stored as 1 file <a href="./run.ps1">`run
 
 ### 3. Run the deployment
 After updating the parameters and the powershell script it is time to start the deployment. Simply run `.\run.ps1` in the root of this folder and the deployment should start.
+
+## Flow of deployment
+![Main bicep code flow][image-maincodeflow]
+
+
+<!-- MARKDOWN LINKS & IMAGES -->
+[image-maincodeflow]: images/main-oneclick-flow.png
