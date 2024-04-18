@@ -1,0 +1,66 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "subscriptionId": {
+      "value": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxx"
+    },
+    "rgName": {
+      "value": "rg-xxxx"
+    },
+    "location": {
+      "value": "westeurope"
+    },
+    "tags": {
+      "value": {
+        "Creator": "admin@example.com",
+        "ExtraTag": "ExtraTagValue"
+      }
+    },
+    "resourcePrefix": {
+      "value": "xxx"
+    },
+    "resourceSuffix": {
+      "value": "xxxxx"
+    },
+    "storageAccountName": {
+      "value": "xxxx"
+    },
+    "fileshareName": {
+      "value": "users"
+    },
+    "vnetName": {
+      "value": "vnet-xxxx"
+    },
+    "subnetName": {
+      "value": "snet-xxxx"
+    },
+    "keyVaultName": {
+      "value": "kv-xxxx"
+    },
+    "domainAdminUsername": {
+      "value": "xxxx"
+    },
+    "domainAdminPassword": {
+      "value": "xxxx"
+    },
+    "localAdminUsername": {
+      "value": "xxxx"
+    },
+    "localAdminPassword": {
+      "value": "xxxx"
+    },
+    "vmStartNumber": {
+      "value": 1
+    },
+    "extraVmNumber": {
+      "value": 1
+    },
+    "ADDomain": {
+      "value": "example.com"
+    },
+    "ouPath": {
+      "value": "OU=AVD,DC=example,DC=com"
+    }
+  }
+}

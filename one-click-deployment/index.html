@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        form {
+            width: 90%;
+            margin: 0 auto;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        input[type="text"], input[type="email"], input[type="number"], intextarea {
+            width: 100%;
+            padding: 5px;
+            margin-top: 5px;
+        }
+
+        .button-effect {
+            background-color: blue;
+            color: white;
+            cursor: pointer;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            text-align: center;
+            display: inline-block;
+            font-size: 16px;
+            margin: 1rem 0rem;
+            transition: background-color 0.3s ease;
+        }
+
+        .button-effect:hover {
+            background-color: rgb(0, 174, 255);
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+</head>
+
+<body class="container-fluid">
+    <form action="/download-parameters" method="post" id="myForm">
+        <div class="row">
+            <div class="col">
+                <label for="subscriptionId">Subscription ID:</label>
+                <input type="text" id="subscriptionId" name="subscriptionId" placeholder="abcdefg-1234-1234-abcdefg">
+    
+                <label for="rgName">Resource group:</label>
+                <input type="text" id="rgName" name="rgName" placeholder="rg-client">
+    
+                <label for="location">Location:</label>
+                <input type="text" id="location" name="location" placeholder="westeurope">
+    
+                <label for="creatorEmail">Creator Email:</label>
+                <input type="email" id="creatorEmail" name="creatorEmail" placeholder="admin@example.com">
+    
+                <label for="resourcePrefix">Resource Prefix:</label>
+                <input type="text" id="resourcePrefix" name="resourcePrefix" placeholder="avd">
+            
+                <label for="resourceSuffix">Resource Suffix:</label>
+                <input type="text" id="resourceSuffix" name="resourceSuffix" placeholder="testing">
+            </div>
+    
+            <div class="col">
+                <label for="storageAccountName">Storage Account Name:</label>
+                <input type="text" id="storageAccountName" name="storageAccountName" placeholder="sa-client">
+
+                <label for="fileshareName">Fileshare Name:</label>
+                <input type="text" id="fileshareName" name="fileshareName" placeholder="users">
+    
+                <label for="vnetName">VNet Name:</label>
+                <input type="text" id="vnetName" name="vnetName" placeholder="vnet-avd">
+    
+                <label for="subnetName">Subnet Name:</label>
+                <input type="text" id="subnetName" name="subnetName" placeholder="snet-avd">
+    
+                <label for="keyVaultName">Key Vault Name:</label>
+                <input type="text" id="keyVaultName" name="keyVaultName" placeholder="kv-client">
+    
+                <label for="domainAdminUsername">Domain Admin Username keyvault name:</label>
+                <input type="text" id="domainAdminUsername" name="domainAdminUsername" placeholder="name in key vault for domain username secret">
+            
+                <label for="domainAdminPassword">Domain Admin Password keyvault name:</label>
+                <input type="text" id="domainAdminPassword" name="domainAdminPassword" placeholder="name in key vault for domain password secret">
+            </div>
+    
+            <div class="col">
+                <label for="localAdminUsername">Local Admin Username keyvault name:</label>
+                <input type="text" id="localAdminUsername" name="localAdminUsername" placeholder="name in key vault for local username secret">
+    
+                <label for="localAdminPassword">Local Admin Password keyvault name:</label>
+                <input type="text" id="localAdminPassword" name="localAdminPassword" placeholder="name in key vault for local password secret">
+    
+                <label for="vmStartNumber">Amount of existing VMs:</label>
+                <input type="number" id="vmStartNumber" name="vmStartNumber" placeholder="0">
+    
+                <label for="extraVmNumber">Amount of VMs to add:</label>
+                <input type="number" id="extraVmNumber" name="extraVmNumber" placeholder="1">
+    
+                <label for="ADDomain">AD Domain:</label>
+                <input type="text" id="ADDomain" name="ADDomain" placeholder="example.com">
+    
+                <label for="ouPath">OU Path:</label>
+                <input type="text" id="ouPath" name="ouPath" placeholder="OU=AVD,DC=example,DC=com">
+            </div>
+        </div>
+        
+        <div class="row justify-content-center">
+            <button type="button" id="downloadJson" class="button-effect col-8">Download parameters</button>
+        </div>
+    </form>
+
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.14.7/dist/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+    <!-- Custom download script -->
+    <script>
+        document.getElementById("downloadJson").addEventListener("click", function() {
+            const subscriptionId = document.getElementById("subscriptionId").value;
+            const rgName = document.getElementById("rgName").value;
+            const location = document.getElementById("location").value;
+            const creatorEmail = document.getElementById("creatorEmail").value;
+            const resourcePrefix = document.getElementById("resourcePrefix").value;
+            const resourceSuffix = document.getElementById("resourceSuffix").value;
+            const storageAccountName = document.getElementById("storageAccountName").value;
+            const fileshareName = document.getElementById("fileshareName").value;
+            const vnetName = document.getElementById("vnetName").value;
+            const subnetName = document.getElementById("subnetName").value;
+            const keyVaultName = document.getElementById("keyVaultName").value;
+            const domainAdminUsername = document.getElementById("domainAdminUsername").value;
+            const domainAdminPassword = document.getElementById("domainAdminPassword").value;
+            const localAdminUsername = document.getElementById("localAdminUsername").value;
+            const localAdminPassword = document.getElementById("localAdminPassword").value;
+            const vmStartNumber = parseInt(document.getElementById("vmStartNumber").value);
+            const extraVmNumber = parseInt(document.getElementById("extraVmNumber").value);
+            const ADDomain = document.getElementById("ADDomain").value;
+            const ouPath = document.getElementById("ouPath").value;
+
+        
+            // Create the setup.parameters.json object
+            const mainParams = {
+                "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+                "contentVersion": "1.0.0.0",
+                "parameters": {
+                    "subscriptionId": {
+                        "value": subscriptionId
+                    },
+                    "rgName": {
+                        "value": rgName
+                    },
+                    "location": {
+                        "value": location
+                    },
+                    "tags": {
+                        "value": {
+                            "Creator": creatorEmail,
+                            "CreationType": "bicep",
+                            "Environment": "automatic"
+                        }
+                    },
+                    "resourcePrefix": {
+                        "value": resourcePrefix
+                    },
+                    "resourceSuffix": {
+                        "value": resourceSuffix
+                    },
+                    "storageAccountName": {
+                        "value": storageAccountName
+                    },
+                    "fileshareName": {
+                        "value": fileshareName
+                    },
+                    "vnetName": {
+                        "value": vnetName
+                    },
+                    "subnetName": {
+                        "value": subnetName
+                    },
+                    "keyVaultName": {
+                        "value": keyVaultName
+                    },
+                    "domainAdminUsername": {
+                        "value": domainAdminUsername
+                    },
+                    "domainAdminPassword": {
+                        "value": domainAdminPassword
+                    },
+                    "localAdminUsername": {
+                    "value": localAdminUsername
+                    },
+                    "localAdminPassword": {
+                        "value": localAdminPassword
+                    },
+                    "vmStartNumber": {
+                        "value": vmStartNumber
+                    },
+                    "extraVmNumber": {
+                        "value": extraVmNumber
+                    },
+                    "ADDomain": {
+                        "value": ADDomain
+                    },
+                    "ouPath": {
+                        "value": ouPath
+                    }
+                }
+            };
+        
+            // Convert the JSON object to a string
+            const jsonString = JSON.stringify(mainParams, null, 2);
+            
+            // Create a download link and click it to download the file
+            const downloadLink = document.createElement("a");
+            downloadLink.href = "data:application/json;charset=utf-8," + encodeURIComponent(jsonString);
+            downloadLink.download = "main.parameters.json";
+            downloadLink.click();
+        });
+    </script>
+</body>
+</html>
