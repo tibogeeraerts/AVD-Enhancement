@@ -80,7 +80,6 @@ module AVDHostpool 'modules/avd-hostpool.bicep' = {
     AVDMaxSessionLimit: 6
     tags: tags
   }
-  dependsOn: [vnet]
 }
 
 // Create the AVD application group
