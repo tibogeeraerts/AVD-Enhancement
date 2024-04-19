@@ -15,7 +15,7 @@ resource PostDeployScript 'Microsoft.Compute/virtualMachines/extensions@2020-12-
     autoUpgradeMinorVersion: true
     settings: {
       fileUris: [
-        'https://avdtibostorage.blob.core.windows.net/public/PostDeployScript2.ps1'
+        'https://avdtibostorage.blob.core.windows.net/public/PostDeployScript.ps1'
       ]
     }
     protectedSettings: {
