@@ -12,8 +12,22 @@ param (
     [Parameter(Mandatory = $true)][string]$SessionHostName
 )
 
+###################################################
+# Tags used by script                             #
+###################################################
+# AIR-CheckForAnnualUpdate: true/false
+# AIR-ExcludeFromUpdate:    true/false
+# AIR-ForceLogoffUsers:     true/false
+# AIR-ImageStatus           up-to-date/out-of-date
+# AIR-ImageDefinition:      example-avd\1.0.0
+####################################################
+
+
+
 # Connect to Azure
 Connect-AzAccount -Identity
+
+
 
 ################
 # START SCRIPT #
@@ -47,7 +61,7 @@ try {
 
     if (!($VmInfo.Tags['AIR-DateCreated'])) {
         #Tag does not exist yet so setting it to today
-        Update-AzTag -Tag @{'AIR-DateCreated' = "$((Get-Date).ToString('dd/MM/yyyy'))" } -ResourceId $VmInfo.Id -Operation Merge | Out-Null
+        Update-AzTag -Tag @{'AIR-DateCreated' = "$((Get-Date).ToString('dd/MM/yyyy'))"} -ResourceId $VmInfo.Id -Operation Merge | Out-Null
     }
 
     # Get VM image reference
@@ -81,7 +95,7 @@ try {
                 $WindowsImageYear = $LatestWindowsSku.Split('-')[1]
                 if ($VmImageYear -lt $WindowsImageYear) {
                     Write-Output "$VmName is not using the latest available image"
-                    Update-AzTag -Tag @{'AIR-Image' = 'out-of-date'} -ResourceId $VmInfo.Id -Operation Merge | Out-Null
+                    Update-AzTag -Tag @{'AIR-ImageStatus' = 'out-of-date'} -ResourceId $VmInfo.Id -Operation Merge | Out-Null
                     Update-AzTag -Tag @{'AIR-ImageDefinition' = $VmImageSku} -ResourceId $VmInfo.Id -Operation Merge | Out-Null
                     $VmOutOfDate = $true
                     Write-Output "$VmName is not using the latest available yearly image"
@@ -102,12 +116,12 @@ try {
 
         if ($DaysSinceCreation -gt 45) {
             Write-Output "$VmName is more than 45 days old"
-            Update-AzTag -Tag @{'AIR-ImageStatus' = 'out-of-date' } -ResourceId $VmInfo.Id -Operation Merge | Out-Null
+            Update-AzTag -Tag @{'AIR-ImageStatus' = 'out-of-date'} -ResourceId $VmInfo.Id -Operation Merge | Out-Null
             $HostIsUpToDate = $false
         }
         else {
             Write-Output "$VmName is less than 45 days old"
-            Update-AzTag -Tag @{'AIR-ImageStatus' = 'up-to-date' } -ResourceId $VmInfo.Id -Operation Merge | Out-Null
+            Update-AzTag -Tag @{'AIR-ImageStatus' = 'up-to-date'} -ResourceId $VmInfo.Id -Operation Merge | Out-Null
         }
     } else {            
         Write-Output "$VmName is using a custom image."
@@ -146,11 +160,11 @@ try {
         # Check if the VM is using the latest available custom image
         if ($currentCustomImageVersion -notmatch $LatestCustomImageVersion) {
             Write-Output "$VmName is out-of-date!"
-            Update-AzTag -Tag @{'AIR-Image' = 'out-of-date'} -ResourceId $VmResourceId -Operation Merge | Out-Null
+            Update-AzTag -Tag @{'AIR-ImageStatus' = 'out-of-date'} -ResourceId $VmResourceId -Operation Merge | Out-Null
             $HostIsUpToDate = $false
         } else {
             Write-Output "$VmName is up-to-date!"
-            Update-AzTag -Tag @{'AIR-Image' = 'up-to-date'} -ResourceId $VmResourceId -Operation Merge | Out-Null
+            Update-AzTag -Tag @{'AIR-ImageStatus' = 'up-to-date'} -ResourceId $VmResourceId -Operation Merge | Out-Null
         }
     }
 
@@ -197,7 +211,7 @@ try {
         $VmTags = $VmInfo.Tags
 
         Write-Output "Checking if $VmName is out-of-date and host is empty."
-        if ($VmTags['AIR-Image'] -eq 'out-of-date' -and $HostIsEmpty) {
+        if ($VmTags['AIR-ImageStatus'] -eq 'out-of-date' -and $HostIsEmpty) {
             Write-Output "UPDATING: $VmName"
 
             # Update NIC config so it won't auto delete
@@ -225,13 +239,16 @@ try {
             if ($null -eq $VmSecurityType) {
                 $VmSecurityType = "Standard"
             }
-            $VmDiskSize = $OsDisk.DiskSizeGB
+            
+            $Disk     = Get-azDisk | Where-Object {$_.Id -eq  $LastVMInfo.StorageProfile.OsDisk.ManagedDisk.Id }
+            $VmDiskSize = $Disk.DiskSizeGB
+            $VmDiskType = $Disk.Sku.Name
 
             # Create new AzVM object
             $NewVm = New-AzVMConfig -VMName $VmName -VMSize $VmSize -SecurityType $VmSecurityType
             $NewVm = Set-AzVMOperatingSystem -VM $NewVm -Windows -ComputerName $VmName -Credential $LocalCredentials -ProvisionVMAgent -EnableAutoUpdate
             $NewVm = Add-AzVMNetworkInterface -VM $NewVm -Id $VmNicId
-            $NewVm = Set-AzVMOSDisk -VM $NewVm -Name "$VmName-osdisk" -CreateOption "FromImage" -Windows -DiskSizeInGB $VmDiskSize -DeleteOption "delete"
+            $NewVm = Set-AzVMOSDisk -VM $NewVm -Name "$VmName-osdisk" -CreateOption "FromImage" -Windows -DiskSizeInGB $VmDiskSize -StorageAccountType $VmDiskType -DeleteOption "delete"
             $NewVm = Set-AzVMBootDiagnostic -VM $NewVm -Disable
 
             # Set new image
