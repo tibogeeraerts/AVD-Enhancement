@@ -47,7 +47,6 @@ function CheckDeploy {
 
     return $ApproveDeploy
 }
-
 #endregion
 
 #region Mandatory parameters
@@ -72,11 +71,11 @@ $Prefix = "vm-xxx"
 $HighestVmNumber = 0
 $VmSize = "Standard_D2s_v5"
 $SecurityType = "TrustedLaunch"
-$LocalAdminUsername = Get-AzKeyVaultSecret -VaultName $kvName -Name "localAdminUser" -AsPlainText
-$LocalAdminPassword = Get-AzKeyVaultSecret -VaultName $kvName -Name "localAdminPassword" -AsPlainText | ConvertTo-SecureString -Force -AsPlainText
+$LocalAdminUsername = Get-AzKeyVaultSecret -VaultName $kvName -Name "localadmin-username" -AsPlainText
+$LocalAdminPassword = Get-AzKeyVaultSecret -VaultName $kvName -Name "localadmin-password" -AsPlainText | ConvertTo-SecureString -Force -AsPlainText
 [pscredential]$LocalCredentials = New-Object System.Management.Automation.PSCredential ($LocalAdminUsername, $LocalAdminPassword)
-$DomainAdminUsername = Get-AzKeyVaultSecret -VaultName $kvName -Name "domainAdminUser" -AsPlainText
-$DomainAdminPassword = Get-AzKeyVaultSecret -VaultName $kvName -Name "domainAdminPassword" -AsPlainText
+$DomainAdminUsername = Get-AzKeyVaultSecret -VaultName $kvName -Name "domainadmin-username" -AsPlainText
+$DomainAdminPassword = Get-AzKeyVaultSecret -VaultName $kvName -Name "domainadmin-password" -AsPlainText
 $Domain = $DomainAdminUsername.Split('@')[1]
 $OuPath = "OU=xxx,DC=domain,DC=com"
 $DiskSize = 128
@@ -120,7 +119,7 @@ if ($AvailableHostPools) {
 }
 else {
     Write-Host "No Hostpools found. Exiting..." -ForegroundColor Red
-    start-sleep -Seconds 5
+    start-sleep -Seconds 3
     exit
 }
 
@@ -172,12 +171,13 @@ if ($CurrentVMNames.Count -ne 0) {
     
     # Set disk variables
     $DiskName = $LastVMInfo.StorageProfile.OsDisk.Name
-    $DiskSize = $LastVMInfo.StorageProfile.OsDisk.DiskSizeGB
-    $DiskType = $LastVMInfo.StorageProfile.OSDisk.ManagedDisk.StorageAccountType
+    $Disk     = Get-azDisk | Where-Object {$_.Id -eq  $LastVMInfo.StorageProfile.OsDisk.ManagedDisk.Id }
+    $DiskSize = $Disk.DiskSizeGB
+    $DiskType = $Disk.Sku.Name
 
     # Set nic variables
-    $NicName = $LastVMInfo.NetworkProfile.NetworkInterfaces[0].Id.Split("/")[-1]
-    $SubnetId = Get-AzNetworkInterface -ResourceGroupName $ResourceGroup -Name $NicName | Select-Object -ExpandProperty IpConfigurations | Select-Object -ExpandProperty Subnet | Select-Object -ExpandProperty Id
+    $NicName    = $LastVMInfo.NetworkProfile.NetworkInterfaces[0].Id.Split("/")[-1]
+    $SubnetId   = Get-AzNetworkInterface -ResourceGroupName $ResourceGroup -Name $NicName | Select-Object -ExpandProperty IpConfigurations | Select-Object -ExpandProperty Subnet | Select-Object -ExpandProperty Id
     $SubnetName = $SubnetId.Split('/')[-1]
 
     # Get highest VM number in pool
@@ -192,16 +192,16 @@ if ($CurrentVMNames.Count -ne 0) {
     # Set VM Image info
     if ($LastVMInfo.StorageProfile.ImageReference.Id) {
         $MarketPlaceImage = $false
-        $CustomImageId = $LastVMInfo.StorageProfile.ImageReference.Id
-        $VmImageSku = $LastVMInfo.StorageProfile.ImageReference.Id.Split('/')[-3]
-        $VmImageVersion = $LastVMInfo.StorageProfile.ImageReference.Id.Split('/')[-1]
+        $CustomImageId    = $LastVMInfo.StorageProfile.ImageReference.Id
+        $VmImageSku       = $LastVMInfo.StorageProfile.ImageReference.Id.Split('/')[-3]
+        $VmImageVersion   = $LastVMInfo.StorageProfile.ImageReference.Id.Split('/')[-1]
     }
     else {
         $MarketPlaceImage = $true
         $VmImagePublisher = $LastVMInfo.StorageProfile.ImageReference.Publisher
-        $VmImageOffer = $LastVMInfo.StorageProfile.ImageReference.Offer
-        $VmImageSku = $LastVMInfo.StorageProfile.ImageReference.Sku
-        $VmImageVersion = $LastVMInfo.StorageProfile.ImageReference.Version
+        $VmImageOffer     = $LastVMInfo.StorageProfile.ImageReference.Offer
+        $VmImageSku       = $LastVMInfo.StorageProfile.ImageReference.Sku
+        $VmImageVersion   = $LastVMInfo.StorageProfile.ImageReference.Version
     }
 
     # Change security type if not Standard
@@ -338,8 +338,8 @@ $NewVmNames | ForEach-Object -Parallel {
     $ResourceGroup = $($using:ResourceGroup)
     $Location = $($using:Location)
     $HostPoolName = $($using:HostPoolName)
-    $RegistrationToken = $($using:RegistrationToken)
     $FileshareLocation = $($using:FileshareLocation)
+    $RegistrationToken = $($using:RegistrationToken)
     $VmSize = $($using:VmSize)
     $MarketPlaceImage = $($using:MarketPlaceImage)
     $CustomImageId = $($using:CustomImageId)
@@ -379,15 +379,16 @@ $NewVmNames | ForEach-Object -Parallel {
         $VM = Set-AzVMSourceImage -VM $VM -Id $CustomImageId
     }
 
-    New-AzVM -VM $VM -ResourceGroupName $ResourceGroup -Location $Location -DisableBginfoExtension -licenseType "Windows_Client"
+    New-AzVM -VM $VM -ResourceGroupName $ResourceGroup -Location $Location -DisableBginfoExtension -licenseType "Windows_Client" | Out-Null
 
+    Write-Output "$(Get-Date) - Created $($VM.Name)"
 
     Start-sleep -Seconds 30
     
     # Check for StartStop tagging and disable them temporarily
     $deployedVM = Get-azVM -ResourceGroupName $ResourceGroup  -Name $VmName
 
-    if ($deployedVM.Tags['StartStop-Enabled'] -ieq "true") {
+    if ($deployedVM.Tags['StartStop-Enabled']) {
        # Write-Host "Temporarily disabling StartStop by setting StartStop-Enabled tag to false" -ForegroundColor Cyan  
         $tagsToChange = @{"StartStop-Enabled" = "false"; }
         Update-AzTag -ResourceId $deployedVM.id -Tag $tagsToChange -Operation Merge | Out-Null
@@ -395,7 +396,7 @@ $NewVmNames | ForEach-Object -Parallel {
         $disabledTag = $true
     }
 
-
+    Write-Output "$(Get-Date) - Domain Joining $($VM.Name)"
     $domainJoinSettings = @{
         Name                   = "joindomain"
         Type                   = "JsonADDomainExtension" 
@@ -414,8 +415,9 @@ $NewVmNames | ForEach-Object -Parallel {
         ResourceGroupName      = $ResourceGroup
         location               = $Location
     }
-    Set-AzVMExtension @domainJoinSettings
+    Set-AzVMExtension @domainJoinSettings  | Out-Null
 
+    Write-Output "$(Get-Date) - Installing Agent $($VM.Name)"
     Set-AzVMCustomScriptExtension `
         -ResourceGroupName $ResourceGroup `
         -VMName $VmName `
@@ -424,13 +426,15 @@ $NewVmNames | ForEach-Object -Parallel {
         -FileUri "https://avdtibostorage.blob.core.windows.net/public/PostDeployScript.ps1" `
         -Run "PostDeployScript.ps1 -FileshareLocation $FileshareLocation -HostpoolToken $RegistrationToken" `
         -TypeHandlerVersion "1.10" `
-        -NoWait
+        -NoWait | Out-Null
 
     if ($disabledTag) {
        # Write-Host "Re-enabling StartStop tag" -ForegroundColor Cyan  
         $tagsToChange = @{"StartStop-Enabled" = "true"; }
         Update-AzTag -ResourceId $deployedVM.id -Tag $tagsToChange -Operation Merge | Out-Null
     }
+
+    Write-Output "$(Get-Date) - Done creating $($VM.Name)"
 } -ThrottleLimit 10
 
 Write-Host "VMs deployed" -ForegroundColor Green
