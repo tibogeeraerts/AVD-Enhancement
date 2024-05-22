@@ -103,6 +103,9 @@ if ($CurrentSessionHosts.Count -eq 0) {
     $Prefix = $LastVMName.Split('-')[1]
     $VmSize = $LastVMInfo.HardwareProfile.VmSize
     $Domain = $CurrentSessionHosts[-1].Name.Split('/')[1].Split('.', 2)[1]
+    if($null -eq $Domain) {
+        $Domain = $DomainAdminUsername.Split('@')[1]
+    }
     $Tags = $LastVMInfo.Tags
 
     # Get OU if available
