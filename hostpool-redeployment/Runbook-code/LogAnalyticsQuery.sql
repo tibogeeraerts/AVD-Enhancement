@@ -30,4 +30,4 @@ AzureDiagnostics
 | project TimeGenerated, action, vmImageDefinition
 | summarize count() by bin(TimeGenerated, 15min), vmImageDefinition
 | order by TimeGenerated asc
-| render areachart
+| render areachart with (title="Images in hostpool", xtitle="Time", ytitle="Amount")
