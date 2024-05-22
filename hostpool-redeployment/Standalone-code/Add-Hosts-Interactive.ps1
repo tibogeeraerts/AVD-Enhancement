@@ -105,6 +105,10 @@ else {
 }
 #endregion
 
+################
+# START SCRIPT #
+################
+
 #region Get existing Host Pools
 $AvailableHostPools = Get-AzWvdHostPool
 
