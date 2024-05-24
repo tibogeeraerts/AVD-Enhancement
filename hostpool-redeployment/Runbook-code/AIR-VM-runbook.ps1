@@ -222,6 +222,20 @@ try {
             # Update NIC config so it won't auto delete
             write-output "Updating NIC so it won't auto-delete"
             $VmInfo.NetworkProfile.NetworkInterfaces[0].DeleteOption = 'Detach'
+
+            write-output "Updating OSDisk so it won't auto-delete"
+            $VmInfo.StorageProfile.OsDisk.DeleteOption = 'Detach'
+
+            $DataDisks = $VmInfo.StorageProfile.DataDisks
+
+            if($dataDisks){
+                write-output "Updating DataDisks so they will auto-delete"
+                forEach($disk in $dataDisks){
+                    Write-Output ">> $($disk.Name)"
+                    $disk.DeleteOption = 'Delete'
+                }
+            }
+            
             $VMInfo | Update-AzVM | Out-Null
 
             # Delete existing host
@@ -257,7 +271,7 @@ try {
             $NewVm = New-AzVMConfig -VMName $VmName -VMSize $VmSize -SecurityType $VmSecurityType
             $NewVm = Set-AzVMOperatingSystem -VM $NewVm -Windows -ComputerName $VmName -Credential $LocalCredentials -ProvisionVMAgent -EnableAutoUpdate
             $NewVm = Add-AzVMNetworkInterface -VM $NewVm -Id $VmNicId
-            $NewVm = Set-AzVMOSDisk -VM $NewVm -Name "$VmName-osdisk" -CreateOption "FromImage" -Windows -DiskSizeInGB $VmDiskSize -StorageAccountType $VmDiskType -DeleteOption "delete"
+            $NewVm = Set-AzVMOSDisk -VM $NewVm -Name "$VmName-osdisk" -CreateOption "FromImage" -Windows -DiskSizeInGB $VmDiskSize -DeleteOption "detach" -StorageAccountType $vmDiskType
             $NewVm = Set-AzVMBootDiagnostic -VM $NewVm -Disable
 
             # Set new image
@@ -271,7 +285,6 @@ try {
                 $ImageDefinitionTag = "$LatestCustomImageName\$LatestCustomImageVersion"
             }
 
-            $VmTags['AIR-ExcludeFromUpdate'] = 'true'
             $VmTags['AIR-ImageStatus'] = 'up-to-date'
             $VmTags['AIR-ImageDefinition'] = $ImageDefinitionTag
             $VmTags['AIR-ForceLogoffUsers'] = 'false'
