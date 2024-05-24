@@ -61,7 +61,7 @@ try {
 
     if (!($VmInfo.Tags['AIR-DateCreated'])) {
         #Tag does not exist yet so setting it to today
-        Update-AzTag -Tag @{'AIR-DateCreated' = "$((Get-Date).ToString('dd/MM/yyyy'))"} -ResourceId $VmInfo.Id -Operation Merge | Out-Null
+        Update-AzTag -Tag @{'AIR-DateCreated' = "$((Get-Date).ToString('dd/MM/yyyy'))" } -ResourceId $VmInfo.Id -Operation Merge | Out-Null
     }
 
     # Get VM image reference
@@ -95,8 +95,8 @@ try {
                 $WindowsImageYear = $LatestWindowsSku.Split('-')[1]
                 if ($VmImageYear -lt $WindowsImageYear) {
                     Write-Output "$VmName is not using the latest available image"
-                    Update-AzTag -Tag @{'AIR-ImageStatus' = 'out-of-date'} -ResourceId $VmInfo.Id -Operation Merge | Out-Null
-                    Update-AzTag -Tag @{'AIR-ImageDefinition' = $VmImageSku} -ResourceId $VmInfo.Id -Operation Merge | Out-Null
+                    Update-AzTag -Tag @{'AIR-ImageStatus' = 'out-of-date' } -ResourceId $VmInfo.Id -Operation Merge | Out-Null
+                    Update-AzTag -Tag @{'AIR-ImageDefinition' = $VmImageSku } -ResourceId $VmInfo.Id -Operation Merge | Out-Null
                     $VmOutOfDate = $true
                     Write-Output "$VmName is not using the latest available yearly image"
                 }
@@ -111,6 +111,11 @@ try {
             
         # Check if the VM is older than 45 days
         $CurrentDate = Get-Date
+        if ($VmInfo.Tags['AIR-DateCreated']) {
+            $CreationDate = [DateTime]::ParseExact($VmInfo.Tags['AIR-DateCreated'], "dd/MM/yyyy", $null)
+        } else {
+            $CreationDate = $CurrentDate
+        }
         $CreationDate = [DateTime]::ParseExact($VmInfo.Tags['AIR-DateCreated'], "dd/MM/yyyy", $null)
         $DaysSinceCreation = ($CurrentDate - $CreationDate).Days
 
@@ -227,6 +232,14 @@ try {
             Remove-AzVM -ResourceGroupName $ResourceGroup -Name $VmName -Force | Out-Null
 
             # Delete disk of VM
+            Write-Output "Getting old disk info"
+            $Disk       = Get-azDisk | Where-Object {$_.Id -eq  $VMInfo.StorageProfile.OsDisk.ManagedDisk.Id }
+            $vmDiskSize = $Disk.DiskSizeGB
+            $vmDiskType = $Disk.Sku.Name
+
+            Write-Output "Disk Size is $vmDiskSize"
+            Write-Output "Disk SKU is $vmDiskType"
+
             Write-Output "Deleting Disk"
             Remove-AzDisk -ResourceGroupName $ResourceGroup -DiskName $OsDisk.Name -Force | Out-Null
 
@@ -240,10 +253,6 @@ try {
                 $VmSecurityType = "Standard"
             }
             
-            $Disk     = Get-azDisk | Where-Object {$_.Id -eq  $LastVMInfo.StorageProfile.OsDisk.ManagedDisk.Id }
-            $VmDiskSize = $Disk.DiskSizeGB
-            $VmDiskType = $Disk.Sku.Name
-
             # Create new AzVM object
             $NewVm = New-AzVMConfig -VMName $VmName -VMSize $VmSize -SecurityType $VmSecurityType
             $NewVm = Set-AzVMOperatingSystem -VM $NewVm -Windows -ComputerName $VmName -Credential $LocalCredentials -ProvisionVMAgent -EnableAutoUpdate

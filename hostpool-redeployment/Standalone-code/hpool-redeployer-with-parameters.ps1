@@ -76,8 +76,9 @@ if ($UseNewImage) {
 ###############################
 #        Start Script         #
 ###############################
+$startTime = Get-Date
 
-# Write some terminal stuff
+# Log start of script
 Write-Host -ForegroundColor Blue "[INFO]     : " -NoNewline
 Write-Host -ForegroundColor White "Starting script!"
 
@@ -97,10 +98,29 @@ if ($CurrentSessionHosts.Count -eq 0) {
     Write-Host -ForegroundColor White "Found session hosts: " -NoNewline
     Write-Host -Separator ", " -ForegroundColor Cyan $CurrentVmNames
 
+    # Get highest VM number in pool
+    foreach ($VmName in $CurrentSessionHosts) {
+        $VmName = $VmName.Name.Split('/')[1]
+        $SessionHostNumber = [int]$VmName.Split('-')[-1].Split('.')[0]
+        if ($SessionHostNumber -gt $HighestVmNumber) {
+            $HighestVmNumber = $SessionHostNumber
+            $LastVmName = $VmName.Split('.')[0]
+        }
+    }
+
     # Change default variable values with existing setup values
-    $LastVMName = $CurrentVMNames[-1]
     $LastVMInfo = Get-AzVM -ResourceGroupName $ResourceGroup -Name $LastVMName
-    $Prefix = $LastVMName.Split('-')[1]
+
+    if ($LastVMName -match '-') {
+        # VMName contains hyphens so cutting of prefix before last section of the split
+        $lastSection = $LastVMName.split('-')[-1]
+        $Prefix = ($LastVMName.split('-') -join '-').replace("-$lastSection", "")
+    } else {
+        # VMName contains no hyphens. Assume last numbers to be the VM number
+        $regex = '[0-9]+$'
+        $Prefix = $LastVMName -replace $regex, ''
+    }
+
     $VmSize = $LastVMInfo.HardwareProfile.VmSize
     $Domain = $CurrentSessionHosts[-1].Name.Split('/')[1].Split('.', 2)[1]
     if($null -eq $Domain) {
@@ -112,43 +132,58 @@ if ($CurrentSessionHosts.Count -eq 0) {
     $JsonADDomainExtension = $LastVMInfo.Extensions | Where-Object { $_.Publisher -eq "Microsoft.Compute" -and $_.Type -eq "JsonADDomainExtension" }
     if ($JsonADDomainExtension) {
         $OuPath = $JsonADDomainExtension.Settings.OrganizationalUnitDN
-    } else { $OuPath = ""}
+    } else { $OuPath = "" }
 
     # Set disk variables
     $DiskName = $LastVMInfo.StorageProfile.OsDisk.Name
-    $DiskSize = $LastVMInfo.StorageProfile.OsDisk.DiskSizeGB
+    $Disk     = Get-azDisk | Where-Object {$_.Id -eq  $LastVMInfo.StorageProfile.OsDisk.ManagedDisk.Id }
+    $DiskSize = $Disk.DiskSizeGB
+    $DiskType = $Disk.Sku.Name
 
     # Set nic variables
     $NicName = $LastVMInfo.NetworkProfile.NetworkInterfaces[0].Id.Split("/")[-1]
     $SubnetId = Get-AzNetworkInterface -ResourceGroupName $ResourceGroup -Name $NicName | Select-Object -ExpandProperty IpConfigurations | Select-Object -ExpandProperty Subnet | Select-Object -ExpandProperty Id
 
-    # Get highest VM number in pool
-    foreach ($VmName in $CurrentSessionHosts) {
-        $VmName = $VmName.Name.Split('/')[1]
-        $SessionHostNumber = [int]$VmName.Split('-')[-1].Split('.')[0]
-        if ($SessionHostNumber -gt $HighestVmNumber) {
-            $HighestVmNumber = $SessionHostNumber
-        }
-    }
-
     # Delete or drain existing hosts
     if ($DeleteExistingHosts) {
         Write-Host -ForegroundColor Yellow "[INFO]     : " -NoNewline; Write-Host -ForegroundColor White "Deleting existing VMs"
 
-        $CurrentVmNames | ForEach-Object -Parallel {
+        $CurrentSessionHosts | ForEach-Object -Parallel {
             $RG = $($using:ResourceGroup)
             $HP = $($using:HostpoolName)
-            $Name = $_
+            $SessionHostName = $_.Name.Split('/')[1]
+            $VmName = $SessionHostName.Split('.')[0]
 
-            Remove-AzWvdSessionHost -ResourceGroupName $RG -HostPoolName $HP -Name $Name
-            Remove-AzVM -ResourceGroupName $RG -Name $Name -Force | Out-Null
+            $VMinfo = Get-azVM -resourcegroupName $RG -Name $VmName
+            
+            # Update NIC config so it won't auto delete
+            # Write-Output "Updating NIC so it will auto-delete"
+            $VmInfo.NetworkProfile.NetworkInterfaces[0].DeleteOption = 'Delete'
+
+            # Write-Output "Updating OSDisk so it will auto-delete"
+            $VmInfo.StorageProfile.OsDisk.DeleteOption = 'Delete'
+
+            $DataDisks = $VmInfo.StorageProfile.DataDisks
+
+            if ($dataDisks) {
+                # Write-Output "Updating DataDisks so they will auto-delete"
+                forEach ($disk in $dataDisks) {
+                    $disk.DeleteOption = 'Delete'
+                }
+            }
+            
+            $VMInfo | Update-AzVM | Out-Null
+
+            # Write-Output "Deleting $VmName"
+            Remove-AzWvdSessionHost -ResourceGroupName $RG -HostPoolName $HP -Name $SessionHostName | Out-Null
+            Remove-AzVM -ResourceGroupName $RG -Name $VmName -Force | Out-Null
         }
 
         Write-Host -ForegroundColor Green "[SUCCES]   : " -NoNewline; Write-Host -ForegroundColor White "VM(s) deleted succesfully"
     } elseif ($DrainExistingHosts) {
         Write-Host -ForegroundColor Yellow "[INFO]     : " -NoNewline; Write-Host -ForegroundColor White "Draining existing VMs"
 
-        $DrainingTags = $Tags + @{"Draining"="true"}
+        $DrainingTags = $Tags + @{"Draining" = "true" }
 
         foreach ($existingVm in $CurrentSessionHosts) {
             $HostpoolVmName = $existingVm.Name.Split('/')[1]
@@ -168,30 +203,23 @@ if ($CurrentSessionHosts.Count -eq 0) {
     }
 }
 
-if ($Tags.ContainsKey("Image")) {
-    $Tags["Image"] = $VmImageSku
+if ($Tags.ContainsKey("AIR-ImageDefinition")) {
+    $Tags["AIR-ImageDefinition"] = "$VmImageSku\$VmImageVersion"
 } else {
-    $Tags += @{"Image"=$VmImageSku}
+    $Tags += @{"AIR-ImageDefinition"= "$VmImageSku\$VmImageVersion"}
 }
 
-if ($Tags.ContainsKey("ImageVersion")) {
-    $Tags["ImageVersion"] = $VmImageVersion
-} else {
-    $Tags += @{"ImageVersion"=$VmImageVersion}
-}
-
-# Get registration token
 $RegistrationToken = (Get-AzWvdHostPoolRegistrationToken -HostPoolName $HostpoolName -resourceGroupName $ResourceGroup).Token
-if ($RegistrationToken -eq "") {
+if (!$RegistrationToken) {
     Write-Output "Generating new registration token..."
     $RegistrationToken = (New-AzWvdRegistrationInfo -ResourceGroupName $ResourceGroup -HostPoolName $HostpoolName -ExpirationTime $((get-date).ToUniversalTime().AddDays(1).ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ'))).Token
 }
 
 # Create new VM names
-for ($i = 0; $i -lt $AmountOfVMs; $i++) {
-    $HighestVmNumber++
+$NewVmNames = @()
+for ($i = 1; $i -le $AmountOfVMs; $i++) {
     $VmNumber = $HighestVmNumber + $i
-    $VmName = "vm-${Prefix}-${VmNumber}"
+    $VmName = "$Prefix-${VmNumber}"
     $NewVmNames += $VmName
 }
 
@@ -200,7 +228,7 @@ Write-Host "[DEPLOYING]: " -ForegroundColor Green -NoNewline
 Write-Host $NewVmNames -ForegroundColor Cyan -Separator ", "
 
 # Create new VMs
-$NewVmNames | ForEach-Object -Parallel{
+$NewVmNames | ForEach-Object -Parallel {
     $VmName = $_
     $ResourceGroup = $($using:ResourceGroup)
     $Location = $($using:Location)
@@ -234,20 +262,24 @@ $NewVmNames | ForEach-Object -Parallel{
     $NIC = New-AzNetworkInterface -Name $NicName -ResourceGroupName $ResourceGroup -Location $Location -SubnetId $SubnetId -Force
 
     $VM = Set-AzVMOperatingSystem -VM $VM -Windows -ComputerName $VmName -Credential $LocalCredentials -ProvisionVMAgent -EnableAutoUpdate
-    $VM = Add-AzVMNetworkInterface -VM $VM -Id $NIC.Id -DeleteOption "Delete"
-    $VM = Set-AzVMOSDisk -VM $VM -Name $DiskName -DiskSizeInGB $DiskSize -StorageAccountType $DiskType -CreateOption "FromImage" -Caching "ReadWrite" -DeleteOption "Delete"
+    $VM = Add-AzVMNetworkInterface -VM $VM -Id $NIC.Id -DeleteOption "Detach"
+    $VM = Set-AzVMOSDisk -VM $VM -Name $DiskName -DiskSizeInGB $DiskSize -StorageAccountType $DiskType -CreateOption "FromImage" -Caching "ReadWrite" -DeleteOption "Detach"
     $VM = Set-AzVMBootDiagnostic -VM $VM -Disable
 
     if ($UseNewImage) {
-        if ($UseCustomImage -eq $true) {
+        if ($UseCustomImage) {
             $VM = Set-AzVMSourceImage -VM $VM -Id $VmImageId
         } else {
             $VM = Set-AzVMSourceImage -VM $VM -PublisherName $VmImagePublisher -Offer $VmImageOffer -Skus $VmImageSku -Version $VmImageVersion
         }
+    } else {
+        $VM = Set-AzVMSourceImage -VM $VM -PublisherName $VmImagePublisher -Offer $VmImageOffer -Skus $VmImageSku -Version $VmImageVersion
     }
 
+    Write-Output "[${VmName}] : Creating..."
     New-AzVM -VM $VM -ResourceGroupName $ResourceGroup -Location $Location -DisableBginfoExtension -licenseType "Windows_Client" | Out-Null
 
+    Write-Output "[${VmName}] : Running domain join"
     $domainJoinSettings = @{
         Name                   = "joindomain"
         Type                   = "JsonADDomainExtension" 
@@ -268,6 +300,7 @@ $NewVmNames | ForEach-Object -Parallel{
     }
     Set-AzVMExtension @domainJoinSettings | Out-Null
 
+    Write-Output "[${VmName}] : Running Post Deploy Scripts (agent install)"
     Set-AzVMCustomScriptExtension `
         -ResourceGroupName $ResourceGroup `
         -VMName $VmName `
@@ -276,6 +309,7 @@ $NewVmNames | ForEach-Object -Parallel{
         -FileUri "https://avdtibostorage.blob.core.windows.net/public/PostDeployScript.ps1" `
         -Run "PostDeployScript.ps1 -FileshareLocation $FileshareLocation -HostpoolToken $RegistrationToken" `
         -TypeHandlerVersion "1.10" | Out-Null
-}
+} -ThrottleLimit 10
 
 Write-Host "[SUCCES]   : " -ForegroundColor Green -NoNewline; Write-Host "VM(s) deployed succesfully!"
+Write-Host "Deployment took $([Math]::Round((new-timespan -start $startTime -End $(Get-Date)).totalMinutes,2)) minutes"
