@@ -60,12 +60,15 @@ in the folder where the script is located. A browser window will open to verify 
 
 #### Possible scenarios
 Script is started and no changes need to be made:
+
 ![interactivecli-nochanges][image-interactivecli-nochanges]
 
 Script is started and no changes need to be made:
+
 ![interactivecli-changeimage][image-interactivecli-changeimage]
 
 Script is started and image gets changed:
+
 ![interactivecli-changename][image-interactivecli-changename]
 </details>
 
